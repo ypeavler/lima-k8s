@@ -1,0 +1,97 @@
+# Deploy kubernetes via kubeadm.
+# $ limactl start ./k8s.yaml
+# $ limactl shell k8s kubectl
+
+# It can be accessed from the host by exporting the kubeconfig file;
+# the ports are already forwarded automatically by lima:
+#
+# $ export KUBECONFIG=$(limactl list k8s --format 'unix://{{.Dir}}/copied-from-guest/kubeconfig.yaml')
+# $ kubectl get no
+# NAME       STATUS   ROLES                  AGE   VERSION
+# lima-k8s   Ready    control-plane,master   44s   v1.22.3
+
+# This template requires Lima v0.20.0 or later.
+vmType: vz
+arch: "aarch64"
+images:
+# Try to use release-yyyyMMdd image if available. Note that release-yyyyMMdd will be removed after several months.
+- location: "https://cloud-images.ubuntu.com/releases/noble/release-20250313/ubuntu-24.04-server-cloudimg-arm64.img"
+  arch: "aarch64"
+  digest: "sha256:103f31c5a5b7f031a60ce3555c8fbd56317fd8ffbaaa7e17002879e6157d546d"
+# Fallback to the latest release image.
+# Hint: run `limactl prune` to invalidate the cache
+- location: "https://cloud-images.ubuntu.com/releases/noble/release/ubuntu-24.04-server-cloudimg-arm64.img"
+  arch: "aarch64"
+
+# Virtual Machine (VM) specification (CPUs, RAM and Disk)
+cpus: 2
+memory: "2GiB"
+disk: "8GiB"
+
+networks:
+- lima: user-v2
+
+portForwards:
+- guestPortRange: [30000, 32767]
+  hostPortRange: [30000, 32767]
+  hostIP:  "0.0.0.0"
+
+containerd:
+  system: true
+  user: false
+
+mounts:
+- location: "~"
+- location: "/tmp/lima"
+  writable: true
+
+provision:
+- mode: system
+  script: |
+    #!/bin/bash
+    # Set the Kubernetes version to install
+    VERSION=1.32.0
+    export DEBIAN_FRONTEND=noninteractive
+
+    # Exit immediately if a command exits with a non-zero status
+    set -eux -o pipefail
+
+    # Check if kubeadm is already installed
+    if command -v kubeadm >/dev/null 2>&1; then
+        echo "kubeadm is already installed. Exiting."
+        exit 0
+    fi
+
+    # Load necessary kernel modules on restart
+    cat <<EOF | sudo tee /etc/modules-load.d/containerd.conf
+    overlay
+    br_netfilter
+    ip_vs
+    ip_vs_rr
+    ip_vs_wrr
+    ip_vs_sh
+    EOF
+
+    # Load kernel modules
+    modprobe overlay
+    modprobe br_netfilter
+    modprobe ip_vs
+    modprobe ip_vs_rr
+    modprobe ip_vs_wrr
+    modprobe ip_vs_sh
+
+    # Configure sysctl parameters for Kubernetes networking
+    cat <<EOF | sudo tee /etc/sysctl.d/99-kubernetes-cri.conf
+    net.bridge.bridge-nf-call-iptables  = 1
+    net.ipv4.ip_forward                 = 1
+    net.bridge.bridge-nf-call-ip6tables = 1
+    EOF
+
+    sysctl --system
+
+    # Determine the stable Kubernetes version
+    VERSION=$(curl -L -s https://dl.k8s.io/release/stable.txt | sed -e 's/v//' | cut -d'.' -f1-2)
+
+    # Add Kubernetes apt repository
+    echo "deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v${VERSION}/deb/ /" | sudo tee /etc/apt/sources.list.d/kubernetes.list
+    curl -fsSL https://pkgs.k8s.io/core:/stable:/v${VERSION}/deb/Release.key | sudo gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
