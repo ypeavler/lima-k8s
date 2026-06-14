@@ -1,11 +1,12 @@
 # This Makefile automates the process of creating and managing Lima VMs
 
-.PHONY: clean-lima-vms create-lima-vms create-single-cp-cluster init-control-plane join-worker-nodes copy-kubeconfig install-cilium install-monitoring help
+.PHONY: clean-lima-vms create-lima-vms create-single-cp-cluster install-dependencies init-control-plane join-worker-nodes copy-kubeconfig install-cilium install-monitoring help
 
 CONTROL_PLANE_VM := k8s-control-plane
 SINGLE_CP_VMS := k8s-control-plane k8s-worker1 k8s-worker2
 HA_VMS := cp1 cp2 cp3 wk1 wk2
 KUBECONFIG_DEST ?= $(HOME)/.kube/config.k8s-on-macos
+export LIMA_MOUNT_DIR ?= $(CURDIR)
 
 help: ## Show available targets
 	@echo "Available targets:"
@@ -46,14 +47,18 @@ create-single-cp-cluster: ## Create single CP cluster (1 CP + 2 workers)
 	done
 	@echo ""
 	@echo "Next steps:"
-	@echo "1. make init-control-plane"
-	@echo "2. make join-worker-nodes"
-	@echo "3. make install-cilium"
-	@echo "4. make install-monitoring"
-	@echo "5. make copy-kubeconfig"
+	@echo "1. make install-dependencies"
+	@echo "2. make init-control-plane"
+	@echo "3. make join-worker-nodes"
+	@echo "4. make install-cilium"
+	@echo "5. make install-monitoring"
+	@echo "6. make copy-kubeconfig"
 
-init-control-plane: ## Run dependency install and kubeadm init in the control-plane VM
-	@limactl shell $(CONTROL_PLANE_VM) -- bash -lc 'cd "$(CURDIR)" && sudo bash ./2-install-deps.sh && sudo bash ./3-cluster-init.sh'
+install-dependencies: ## Install Kubernetes packages in the control-plane VM
+	@limactl shell $(CONTROL_PLANE_VM) -- bash -lc 'cd "$(CURDIR)" && sudo bash ./2-install-deps.sh'
+
+init-control-plane: ## Run kubeadm init in the control-plane VM
+	@limactl shell $(CONTROL_PLANE_VM) -- bash -lc 'cd "$(CURDIR)" && sudo bash ./3-cluster-init.sh'
 
 join-worker-nodes: ## Install dependencies on workers and join them to the cluster
 	@bash ./3b-join-worker-nodes.sh

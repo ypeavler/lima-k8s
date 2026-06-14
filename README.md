@@ -41,6 +41,7 @@ numbered shell scripts are guest-side implementation helpers.
 
 ```bash
 make create-single-cp-cluster
+make install-dependencies
 make init-control-plane
 make join-worker-nodes
 make install-cilium

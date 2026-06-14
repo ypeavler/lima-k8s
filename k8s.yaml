@@ -41,7 +41,7 @@ containerd:
   user: false
 
 mounts:
-- location: "~"
+- location: "{{.Env.LIMA_MOUNT_DIR}}"
 
 provision:
 - mode: system
