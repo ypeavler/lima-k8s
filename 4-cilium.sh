@@ -1,5 +1,22 @@
 #!/bin/bash
 
+set -eux -o pipefail
+
+K8S_SERVICE_PORT="${K8S_SERVICE_PORT:-6443}"
+K8S_SERVICE_HOST="${K8S_SERVICE_HOST:-}"
+
+if [[ -z "${K8S_SERVICE_HOST}" ]] && [[ -f /tmp/lima/kubeadm-config.yaml ]]; then
+  endpoint=$(awk '/controlPlaneEndpoint:/ {print $2}' /tmp/lima/kubeadm-config.yaml | tail -n 1)
+  if [[ -n "${endpoint}" ]]; then
+    K8S_SERVICE_HOST="${endpoint%%:*}"
+    K8S_SERVICE_PORT="${endpoint##*:}"
+  fi
+fi
+
+if [[ -z "${K8S_SERVICE_HOST}" ]]; then
+  K8S_SERVICE_HOST=$(hostname -I | awk '{print $1}')
+fi
+
 # Check and install Cilium CLI if not present
 if ! command -v cilium &> /dev/null; then
   echo "Cilium CLI not found. Installing..."
@@ -27,13 +44,14 @@ fi
 
 # Install Cilium using Helm
 helm repo add cilium https://helm.cilium.io/
-helm install cilium cilium/cilium --version 1.17.3 \
+helm upgrade --install cilium cilium/cilium --version 1.17.3 \
   --namespace kube-system \
+  --create-namespace \
   --set kubeProxyReplacement=true \
   --set hostServices.enabled=true \
   --set serviceAccount.enabled=true \
-  --set k8sServiceHost=192.168.104.200 \
-  --set k8sServicePort=6443 \
+  --set k8sServiceHost="${K8S_SERVICE_HOST}" \
+  --set k8sServicePort="${K8S_SERVICE_PORT}" \
   --set ipam.mode=cluster-pool \
   --set ipam.clusterPoolIPv4PodCIDR=10.254.0.0/16 \
   --set prometheus.enabled=true \

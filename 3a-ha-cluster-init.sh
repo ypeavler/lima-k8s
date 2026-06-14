@@ -97,6 +97,7 @@ spec:
 status: {}
 EOF
 # Create kubeadm configuration file
+mkdir -p /tmp/lima
 cat <<EOF >/tmp/lima/kubeadm-config.yaml
 kind: InitConfiguration
 apiVersion: kubeadm.k8s.io/v1beta4
@@ -137,8 +138,16 @@ sed -i 's#path: /etc/kubernetes/super-admin.conf#path: /etc/kubernetes/admin.con
 # Remove control-plane node isolation
 #kubectl taint nodes --all node-role.kubernetes.io/control-plane-
 
-# Copy kubeconfig to the user's home directory for kubectl access
-mkdir -p ${HOME:-/root}/.kube
-cp -f $KUBECONFIG ${HOME:-/root}/.kube/config
+# Copy kubeconfig to the invoking user's home directory for kubectl access
+root_home=$(getent passwd root | cut -d: -f6)
+mkdir -p "${root_home}/.kube"
+cp -f "$KUBECONFIG" "${root_home}/.kube/config"
+
+if [[ -n "${SUDO_USER:-}" ]]; then
+    user_home=$(getent passwd "$SUDO_USER" | cut -d: -f6)
+    mkdir -p "${user_home}/.kube"
+    cp -f "$KUBECONFIG" "${user_home}/.kube/config"
+    chown -R "$SUDO_USER":"$SUDO_USER" "${user_home}/.kube"
+fi
 
 echo "Kubernetes control-plane node initialized successfully."

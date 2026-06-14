@@ -42,8 +42,6 @@ containerd:
 
 mounts:
 - location: "~"
-- location: "/tmp/lima"
-  writable: true
 
 provision:
 - mode: system
@@ -89,9 +87,6 @@ provision:
 
     sysctl --system
 
-    # Determine the stable Kubernetes version
-    VERSION=$(curl -L -s https://dl.k8s.io/release/stable.txt | sed -e 's/v//' | cut -d'.' -f1-2)
-
-    # Add Kubernetes apt repository
-    echo "deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v${VERSION}/deb/ /" | sudo tee /etc/apt/sources.list.d/kubernetes.list
-    curl -fsSL https://pkgs.k8s.io/core:/stable:/v${VERSION}/deb/Release.key | sudo gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+    # Package installation is handled later by 2-install-deps.sh.
+    # Keeping the Lima provision step limited to local kernel and sysctl prep
+    # avoids guest bootstrap failures on networks that require custom trust.

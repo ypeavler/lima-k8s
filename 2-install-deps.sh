@@ -7,11 +7,26 @@ export DEBIAN_FRONTEND=noninteractive
 # Exit immediately if a command exits with a non-zero status
 set -eux -o pipefail
 
+check_tls_access() {
+    local url="$1"
+    if ! curl -fsSLI --max-time 20 "$url" >/dev/null; then
+        cat >&2 <<'EOF'
+Unable to reach a required HTTPS endpoint from the guest VM.
+If you are on a corporate network, install the required corporate root
+certificates into the guest trust store before re-running this script.
+EOF
+        return 1
+    fi
+}
+
 # Check if kubeadm is already installed
 if command -v kubeadm >/dev/null 2>&1; then
     echo "kubeadm is already installed. Exiting."
     exit 0
 fi
+
+check_tls_access "https://dl.k8s.io/release/stable.txt"
+check_tls_access "https://pkgs.k8s.io/"
 
 # Load necessary kernel modules
 cat <<EOF | sudo tee /etc/modules-load.d/containerd.conf
@@ -33,6 +48,7 @@ sysctl --system
 VERSION=$(curl -L -s https://dl.k8s.io/release/stable.txt | sed -e 's/v//' | cut -d'.' -f1-2)
 
 # Add Kubernetes apt repository
+mkdir -p /etc/apt/keyrings
 echo "deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v${VERSION}/deb/ /" | sudo tee /etc/apt/sources.list.d/kubernetes.list
 curl -fsSL https://pkgs.k8s.io/core:/stable:/v${VERSION}/deb/Release.key | sudo gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
 

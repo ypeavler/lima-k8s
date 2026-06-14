@@ -23,6 +23,7 @@ kubeadm config images pull --cri-socket=unix:///run/containerd/containerd.sock
 systemctl start kubelet
 
 # Create kubeadm configuration file
+mkdir -p /tmp/lima
 cat <<EOF >/tmp/lima/kubeadm-config.yaml
 kind: InitConfiguration
 apiVersion: kubeadm.k8s.io/v1beta4
@@ -57,8 +58,16 @@ kubectl taint nodes --all node-role.kubernetes.io/control-plane-
 # Replace the server address with localhost for host access
 sed -e "/server:/ s|https://.*:\([0-9]*\)$|https://127.0.0.1:\1|" -i $KUBECONFIG
 
-# Copy kubeconfig to the user's home directory for kubectl access
-mkdir -p ${HOME:-/root}/.kube
-cp -f $KUBECONFIG ${HOME:-/root}/.kube/config
+# Copy kubeconfig to the invoking user's home directory for kubectl access
+root_home=$(getent passwd root | cut -d: -f6)
+mkdir -p "${root_home}/.kube"
+cp -f "$KUBECONFIG" "${root_home}/.kube/config"
+
+if [[ -n "${SUDO_USER:-}" ]]; then
+    user_home=$(getent passwd "$SUDO_USER" | cut -d: -f6)
+    mkdir -p "${user_home}/.kube"
+    cp -f "$KUBECONFIG" "${user_home}/.kube/config"
+    chown -R "$SUDO_USER":"$SUDO_USER" "${user_home}/.kube"
+fi
 
 echo "Kubernetes control-plane node initialized successfully."
